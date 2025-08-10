@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/resizable";
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
 import LoadingStep from "@/components/ui/loader";
-import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
+// import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
+import { StreamingPlaygroundEditor } from "@/features/playground/components/streaming-playground-editor";
 import ToggleAI from "@/features/playground/components/toggle-ai";
 import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer";
 import { usePlayground } from "@/features/playground/hooks/usePlayground";
@@ -506,23 +507,11 @@ const MainPlaygroundPage: React.FC = () => {
                     className="h-full"
                   >
                     <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
-                      <PlaygroundEditor
+                      <StreamingPlaygroundEditor
                         activeFile={activeFile}
                         content={activeFile?.content || ""}
                         onContentChange={(value) =>
                           activeFileId && updateFileContent(activeFileId, value)
-                        }
-                        suggestion={aiSuggestions.suggestion}
-                        suggestionLoading={aiSuggestions.isLoading}
-                        suggestionPosition={aiSuggestions.position}
-                        onAcceptSuggestion={(editor, monaco) =>
-                          aiSuggestions.acceptSuggestion(editor, monaco)
-                        }
-                        onRejectSuggestion={(editor) =>
-                          aiSuggestions.rejectSuggestion(editor)
-                        }
-                        onTriggerSuggestion={(type, editor) =>
-                          aiSuggestions.fetchSuggestion(type, editor)
                         }
                       />
                     </ResizablePanel>

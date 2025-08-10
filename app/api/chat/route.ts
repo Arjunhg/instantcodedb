@@ -102,7 +102,7 @@ Return only the enhanced prompt, nothing else.`
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "codellama:latest",
+        model: "deepseek-coder:1.3b",
         prompt: enhancementPrompt,
         stream: false,
         options: {
@@ -112,6 +112,7 @@ Return only the enhanced prompt, nothing else.`
       }),
     })
 
+    
     if (!response.ok) {
       throw new Error("Failed to enhance prompt")
     }
