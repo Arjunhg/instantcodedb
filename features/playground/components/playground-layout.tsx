@@ -4,7 +4,7 @@ import { usePlayground } from "../context/playground-context"
 import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import LoadingStep from "@/components/ui/loader"
-import { PlaygroundEditor } from "./playground-editor"
+import { StreamingPlaygroundEditor } from "./streaming-playground-editor"
 import { PlaygroundHeader } from "./playground-header"
 
 export function PlaygroundLayout() {
@@ -56,7 +56,11 @@ export function PlaygroundLayout() {
   return (
     <div className="h-screen flex flex-col">
       <PlaygroundHeader />
-      <PlaygroundEditor />
+      <StreamingPlaygroundEditor 
+        activeFile={undefined}
+        content=""
+        onContentChange={() => {}}
+      />
     </div>
   )
 }

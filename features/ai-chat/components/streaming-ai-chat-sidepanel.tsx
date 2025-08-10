@@ -28,6 +28,7 @@ import {
   Search,
   Filter,
   Download,
+  Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -53,8 +54,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EnhancedCodeBlock } from "./ai-chat-code-blocks";
 import { EnhancedFilePreview } from "./file-preview";
-import "katex/dist/katex.min.css";
 import { useStreamingChat } from "../hooks/useStreamingChat";
+import "katex/dist/katex.min.css";
 
 interface FileAttachment {
   id: string;
@@ -67,31 +68,7 @@ interface FileAttachment {
   mimeType?: string;
 }
 
-interface CodeSuggestion {
-  id: string;
-  title: string;
-  description: string;
-  code: string;
-  language: string;
-  insertPosition?: { line: number; column: number };
-  fileName?: string;
-  confidence?: number;
-  category?: "optimization" | "bug_fix" | "feature" | "refactor" | "security";
-}
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  id: string;
-  timestamp: Date;
-  attachments?: FileAttachment[];
-  suggestions?: CodeSuggestion[];
-  type?: "chat" | "code_review" | "suggestion" | "error_fix" | "optimization";
-  tokens?: number;
-  model?: string;
-}
-
-interface AIChatSidePanelProps {
+interface StreamingAIChatSidePanelProps {
   isOpen: boolean;
   onClose: () => void;
   onInsertCode?: (
@@ -107,202 +84,7 @@ interface AIChatSidePanelProps {
   theme?: "dark" | "light";
 }
 
-const MessageTypeIndicator: React.FC<{
-  type?: string;
-  model?: string;
-  tokens?: number;
-}> = ({ type, model, tokens }) => {
-  const getTypeConfig = (type?: string) => {
-    switch (type) {
-      case "code_review":
-        return { icon: Code, color: "text-blue-400", label: "Code Review" };
-      case "suggestion":
-        return {
-          icon: Sparkles,
-          color: "text-purple-400",
-          label: "Suggestion",
-        };
-      case "error_fix":
-        return { icon: RefreshCw, color: "text-red-400", label: "Error Fix" };
-      case "optimization":
-        return { icon: Zap, color: "text-yellow-400", label: "Optimization" };
-      default:
-        return { icon: MessageSquare, color: "text-zinc-400", label: "Chat" };
-    }
-  };
-
-  const config = getTypeConfig(type);
-  const Icon = config.icon;
-
-  return (
-    <div className="flex items-center justify-between mb-2">
-      <div className="flex items-center gap-1">
-        <Icon className={cn("h-3 w-3", config.color)} />
-        <span className={cn("text-xs font-medium", config.color)}>
-          {config.label}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        {model && <span>{model}</span>}
-        {tokens && <span>{tokens} tokens</span>}
-      </div>
-    </div>
-  );
-};
-
-const CodeSuggestionCard: React.FC<{
-  suggestion: CodeSuggestion;
-  onInsert: () => void;
-  onCopy: () => void;
-  onRun?: (code: string, language: string) => void;
-  activeFileName?: string;
-}> = ({ suggestion, onInsert, onCopy, onRun, activeFileName }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await onCopy();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getCategoryColor = (category?: string) => {
-    switch (category) {
-      case "optimization":
-        return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-      case "bug_fix":
-        return "bg-red-500/10 text-red-400 border-red-500/20";
-      case "feature":
-        return "bg-green-500/10 text-green-400 border-green-500/20";
-      case "refactor":
-        return "bg-blue-500/10 text-blue-400 border-blue-500/20";
-      case "security":
-        return "bg-purple-500/10 text-purple-400 border-purple-500/20";
-      default:
-        return "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
-    }
-  };
-
-  return (
-    <div className="border border-zinc-700/50 rounded-lg overflow-hidden bg-zinc-900/30 my-3 group hover:bg-zinc-900/50 transition-colors">
-      <div className="p-3 bg-zinc-800/30">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h4 className="text-sm font-medium text-zinc-200">
-                {suggestion.title}
-              </h4>
-              {suggestion.category && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs",
-                    getCategoryColor(suggestion.category)
-                  )}
-                >
-                  {suggestion.category}
-                </Badge>
-              )}
-              {suggestion.confidence && (
-                <Badge variant="outline" className="text-xs">
-                  {Math.round(suggestion.confidence * 100)}% match
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-zinc-400 mb-2">
-              {suggestion.description}
-            </p>
-            {suggestion.fileName && (
-              <div className="text-xs text-zinc-500">
-                Target: {suggestion.fileName}
-                {suggestion.insertPosition && (
-                  <span className="ml-2">
-                    Line {suggestion.insertPosition.line}:
-                    {suggestion.insertPosition.column}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopy}
-                  className="h-7 px-2 text-zinc-400 hover:text-zinc-200"
-                >
-                  {copied ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                  <span className="ml-1 text-xs">Copy</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy code to clipboard</TooltipContent>
-            </Tooltip>
-
-            {onRun &&
-              ["javascript", "python", "bash"].includes(
-                suggestion.language
-              ) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        onRun(suggestion.code, suggestion.language)
-                      }
-                      className="h-7 px-2 text-green-400 hover:text-green-300 hover:bg-green-500/10"
-                    >
-                      <Terminal className="h-3 w-3" />
-                      <span className="ml-1 text-xs">Run</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Run code</TooltipContent>
-                </Tooltip>
-              )}
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onInsert}
-                  className="h-7 px-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                  disabled={!activeFileName}
-                >
-                  <Plus className="h-3 w-3" />
-                  <span className="ml-1 text-xs">Insert</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {activeFileName
-                  ? `Insert into ${activeFileName}`
-                  : "No active file"}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-zinc-700/50">
-        <EnhancedCodeBlock
-          className={`language-${suggestion.language}`}
-          onInsert={() => onInsert()}
-          onRun={onRun}
-          fileName={suggestion.fileName}
-        >
-          {suggestion.code}
-        </EnhancedCodeBlock>
-      </div>
-    </div>
-  );
-};
-
-export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
+export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> = ({
   isOpen,
   onClose,
   onInsertCode,
@@ -313,9 +95,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
   cursorPosition,
   theme = "dark",
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [chatMode, setChatMode] = useState<
@@ -323,12 +103,21 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
   >("chat");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
-  const [showSettings, setShowSettings] = useState(false);
-  const [autoSave, setAutoSave] = useState(true);
-  const [streamResponse, setStreamResponse] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    messages,
+    isLoading,
+    isStreaming,
+    error,
+    currentStreamingMessageId,
+    sendMessage,
+    cancelStream,
+    clearMessages,
+    retryLastMessage,
+  } = useStreamingChat();
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -341,9 +130,9 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
       scrollToBottom();
     }, 100);
     return () => clearTimeout(timeoutId);
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreaming]);
 
-  // Enhanced language detection with more file types
+  // Enhanced language detection
   const detectLanguage = (fileName: string, content: string): string => {
     const ext = fileName.split(".").pop()?.toLowerCase();
     if (ext) {
@@ -387,7 +176,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
       return langMap[ext] || "text";
     }
 
-    // Enhanced content-based detection
+    // Content-based detection
     if (content.includes("import React") || content.includes("useState"))
       return "jsx";
     if (content.includes("interface ") || content.includes(": string"))
@@ -405,55 +194,19 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     return "text";
   };
 
-  const detectFileType = (
-    fileName: string,
-    content: string
-  ): FileAttachment["type"] => {
-    // Only allow code files
-    const ext = fileName.split(".").pop()?.toLowerCase();
-    if (
-      [
-        "js",
-        "jsx",
-        "ts",
-        "tsx",
-        "py",
-        "java",
-        "cpp",
-        "c",
-        "html",
-        "css",
-        "scss",
-        "json",
-        "xml",
-        "yaml",
-        "sql",
-        "sh",
-        "php",
-        "rb",
-        "go",
-        "rs",
-      ].includes(ext || "")
-    )
-      return "code";
-    return "code"; // fallback: treat everything as code
-  };
-
   const addFileAttachment = (
     fileName: string,
     content: string,
     mimeType?: string
   ) => {
     const language = detectLanguage(fileName, content);
-    const type = detectFileType(fileName, content);
-    if (type !== "code") return; // Only allow code files
     const newFile: FileAttachment = {
       id: Date.now().toString(),
       name: fileName,
       content: content.trim(),
       language,
       size: content.length,
-      type,
+      type: "code",
       preview: content.substring(0, 200) + (content.length > 200 ? "..." : ""),
       mimeType,
     };
@@ -464,7 +217,6 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     setAttachments((prev) => prev.filter((file) => file.id !== id));
   };
 
-  // Enhanced paste detection
   const handlePaste = (e: React.ClipboardEvent) => {
     const pastedText = e.clipboardData.getData("text");
 
@@ -512,18 +264,6 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
           suggestedName = pastedText.includes("interface")
             ? "script.ts"
             : "script.js";
-        } else if (
-          pastedText.includes("SELECT") ||
-          pastedText.includes("CREATE")
-        ) {
-          suggestedName = "query.sql";
-        } else if (
-          pastedText.includes("<!DOCTYPE") ||
-          pastedText.includes("<html")
-        ) {
-          suggestedName = "page.html";
-        } else if (pastedText.includes("public class")) {
-          suggestedName = "Main.java";
         }
 
         const fileName = prompt(
@@ -553,120 +293,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     });
   };
 
-  // Enhanced code suggestions with more categories
-  const generateCodeSuggestions = (
-    content: string,
-    attachments: FileAttachment[]
-  ): CodeSuggestion[] => {
-    const suggestions: CodeSuggestion[] = [];
-
-    // Context-aware suggestions based on active file
-    if (activeFileContent && activeFileName) {
-      // Security suggestions
-      if (
-        content.toLowerCase().includes("security") ||
-        content.toLowerCase().includes("vulnerability")
-      ) {
-        suggestions.push({
-          id: "security-headers",
-          title: "Add Security Headers",
-          description: "Implement security headers for web applications",
-          code: `// Security headers middleware\nconst securityHeaders = {\n  'X-Content-Type-Options': 'nosniff',\n  'X-Frame-Options': 'DENY',\n  'X-XSS-Protection': '1; mode=block',\n  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',\n  'Content-Security-Policy': \"default-src 'self'\"\n};\n\napp.use((req, res, next) => {\n  Object.entries(securityHeaders).forEach(([key, value]) => {\n    res.setHeader(key, value);\n  });\n  next();\n});`,
-          language: activeFileLanguage || "javascript",
-          fileName: activeFileName,
-          confidence: 0.9,
-          category: "security",
-        });
-      }
-
-      // Performance optimization suggestions
-      if (
-        content.toLowerCase().includes("optimize") ||
-        content.toLowerCase().includes("performance")
-      ) {
-        suggestions.push({
-          id: "performance-optimization",
-          title: "Performance Optimization",
-          description:
-            "Optimize component rendering with React.memo and useMemo",
-          code: `import React, { memo, useMemo, useCallback } from 'react';\n\nconst OptimizedComponent = memo(({ data, onUpdate }) => {\n  const processedData = useMemo(() => {\n    return data.map(item => ({\n      ...item,\n      processed: true\n    }));\n  }, [data]);\n\n  const handleUpdate = useCallback((id) => {\n    onUpdate(id);\n  }, [onUpdate]);\n\n  return (\n    <div>\n      {processedData.map(item => (\n        <div key={item.id} onClick={() => handleUpdate(item.id)}>\n          {item.name}\n        </div>\n      ))}\n    </div>\n  );\n});\n\nexport default OptimizedComponent;`,
-          language: activeFileLanguage || "jsx",
-          fileName: activeFileName,
-          confidence: 0.85,
-          category: "optimization",
-        });
-      }
-
-      // Error handling suggestions
-      if (
-        content.toLowerCase().includes("error") ||
-        content.toLowerCase().includes("fix")
-      ) {
-        suggestions.push({
-          id: "error-boundary",
-          title: "Add Error Boundary",
-          description: "Comprehensive error boundary for React applications",
-          code: `import React from 'react';\n\nclass ErrorBoundary extends React.Component {\n  constructor(props) {\n    super(props);\n    this.state = { hasError: false, error: null, errorInfo: null };\n  }\n\n  static getDerivedStateFromError(error) {\n    return { hasError: true };\n  }\n\n  componentDidCatch(error, errorInfo) {\n    this.setState({\n      error: error,\n      errorInfo: errorInfo\n    });\n    \n    // Log error to monitoring service\n    console.error('Error caught by boundary:', error, errorInfo);\n  }\n\n  render() {\n    if (this.state.hasError) {\n      return (\n        <div className=\"error-boundary\">\n          <h2>Something went wrong.</h2>\n          <details style={{ whiteSpace: 'pre-wrap' }}>\n            {this.state.error && this.state.error.toString()}\n            <br />\n            {this.state.errorInfo.componentStack}\n          </details>\n        </div>\n      );\n    }\n\n    return this.props.children;\n  }\n}`,
-          language: activeFileLanguage || "jsx",
-          fileName: activeFileName,
-          confidence: 0.88,
-          category: "bug_fix",
-        });
-      }
-
-      // Type safety suggestions for TypeScript
-      if (activeFileLanguage === "typescript" || activeFileLanguage === "tsx") {
-        suggestions.push({
-          id: "advanced-types",
-          title: "Advanced TypeScript Types",
-          description: "Improve type safety with advanced TypeScript patterns",
-          code: `// Utility types for better type safety\ntype DeepReadonly<T> = {\n  readonly [P in keyof T]: T[P] extends object ? DeepReadonly<T[P]> : T[P];\n};\n\ntype NonNullable<T> = T extends null | undefined ? never : T;\n\ntype ApiResponse<T> = {\n  data: T;\n  status: 'success' | 'error';\n  message?: string;\n  timestamp: Date;\n};\n\n// Generic hook with proper typing\nfunction useApi<T>(url: string): {\n  data: T | null;\n  loading: boolean;\n  error: string | null;\n  refetch: () => Promise<void>;\n} {\n  const [data, setData] = useState<T | null>(null);\n  const [loading, setLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  const refetch = useCallback(async () => {\n    setLoading(true);\n    setError(null);\n    try {\n      const response = await fetch(url);\n      const result: ApiResponse<T> = await response.json();\n      setData(result.data);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : 'Unknown error');\n    } finally {\n      setLoading(false);\n    }\n  }, [url]);\n\n  return { data, loading, error, refetch };\n}`,
-          language: "typescript",
-          fileName: activeFileName,
-          confidence: 0.92,
-          category: "feature",
-        });
-      }
-    }
-
-    // Analyze attachments for context
-    attachments.forEach((file) => {
-      if (file.type === "code") {
-        if (file.content.includes("TODO") || file.content.includes("FIXME")) {
-          suggestions.push({
-            id: `todo-${file.id}`,
-            title: `Complete TODO in ${file.name}`,
-            description: "Implementation for the TODO comment",
-            code: `// Implementation for TODO\nconst implementation = async () => {\n  try {\n    // Add your logic here\n    const result = await performOperation();\n    return { success: true, data: result };\n  } catch (error) {\n    console.error('Operation failed:', error);\n    return { success: false, error: error.message };\n  }\n};`,
-            language: file.language,
-            fileName: file.name,
-            confidence: 0.7,
-            category: "feature",
-          });
-        }
-
-        if (
-          file.content.includes("console.log") &&
-          file.language === "javascript"
-        ) {
-          suggestions.push({
-            id: `logging-${file.id}`,
-            title: `Improve Logging in ${file.name}`,
-            description: "Replace console.log with proper logging",
-            code: `// Improved logging utility\nconst logger = {\n  info: (message, data) => {\n    console.info(\`[INFO] \${new Date().toISOString()}: \${message}\`, data);\n  },\n  warn: (message, data) => {\n    console.warn(\`[WARN] \${new Date().toISOString()}: \${message}\`, data);\n  },\n  error: (message, error) => {\n    console.error(\`[ERROR] \${new Date().toISOString()}: \${message}\`, error);\n  },\n  debug: (message, data) => {\n    if (process.env.NODE_ENV === 'development') {\n      console.debug(\`[DEBUG] \${new Date().toISOString()}: \${message}\`, data);\n    }\n  }\n};\n\n// Usage: logger.info('User logged in', { userId: 123 });`,
-            language: file.language,
-            fileName: file.name,
-            confidence: 0.75,
-            category: "refactor",
-          });
-        }
-      }
-    });
-
-    return suggestions;
-  };
-
-  const getChatModePrompt = (mode: string, content: string, context: any) => {
+  const getChatModePrompt = (mode: string, content: string) => {
     const baseContext = {
       activeFile: activeFileName,
       language: activeFileLanguage,
@@ -699,128 +326,18 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isStreaming) return;
 
-    const messageType =
-      chatMode === "chat"
-        ? "chat"
-        : chatMode === "review"
-        ? "code_review"
-        : chatMode === "fix"
-        ? "error_fix"
-        : "optimization";
+    const contextualMessage = getChatModePrompt(chatMode, input.trim());
 
-    // Prepare enhanced context
-    let contextualMessage = getChatModePrompt(chatMode, input.trim(), {
-      activeFile: activeFileName,
-      activeFileContent: activeFileContent?.substring(0, 2000),
-      language: activeFileLanguage,
-      cursorPosition,
+    await sendMessage(contextualMessage, {
+      attachments: [...attachments],
+      mode: chatMode,
+      history: messages.slice(-10),
     });
 
-    // Use streaming if enabled
-    if (streamResponse) {
-      // Import and use streaming hook
-      const { sendMessage: sendStreamingMessage } = useStreamingChat();
-      
-      await sendStreamingMessage(contextualMessage, {
-        attachments: [...attachments],
-        mode: chatMode,
-        history: messages.slice(-10),
-      });
-      
-      setInput("");
-      setAttachments([]);
-      return;
-    }
-
-    // Fallback to non-streaming (original code)
-    const newMessage: ChatMessage = {
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-      attachments: [...attachments],
-      id: Date.now().toString(),
-      type: messageType,
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
     setInput("");
-    setIsLoading(true);
-
-    try {
-      if (attachments.length > 0) {
-        contextualMessage += "\n\nAttached files:\n";
-        attachments.forEach((file) => {
-          contextualMessage += `\n**${file.name}** (${file.language}, ${
-            file.type
-          }):\n\`\`\`${file.language}\n${file.content.substring(
-            0,
-            1000
-          )}\n\`\`\`\n`;
-        });
-      }
-
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: contextualMessage,
-          history: messages.slice(-10).map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-          mode: chatMode,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const suggestions = generateCodeSuggestions(input.trim(), attachments);
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: data.response,
-            timestamp: new Date(),
-            suggestions: suggestions.length > 0 ? suggestions : undefined,
-            id: Date.now().toString(),
-            type: messageType,
-            tokens: data.tokens,
-            model: data.model || "AI Assistant",
-          },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content:
-              "Sorry, I encountered an error while processing your request. Please try again.",
-            timestamp: new Date(),
-            id: Date.now().toString(),
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            "I'm having trouble connecting right now. Please check your internet connection and try again.",
-          timestamp: new Date(),
-          id: Date.now().toString(),
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-      setAttachments([]);
-    }
+    setAttachments([]);
   };
 
   const handleInsertCode = (
@@ -834,14 +351,6 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
         fileName || activeFileName,
         position || cursorPosition
       );
-    }
-  };
-
-  const handleCopySuggestion = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
-    } catch (err) {
-      console.error("Failed to copy code:", err);
     }
   };
 
@@ -868,7 +377,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ai-chat-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `streaming-ai-chat-${new Date().toISOString().split("T")[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -922,26 +431,78 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
             </div>
           )}
 
+          {/* Streaming progress bar */}
+          {isStreaming && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-800 z-10">
+              <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 animate-pulse"></div>
+            </div>
+          )}
+
           {/* Enhanced Header */}
           <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
             <div className="flex items-center justify-between p-6">
               <div className="flex items-center gap-3">
                 <div className="relative w-10 h-10 border rounded-full flex flex-col justify-center items-center">
                   <Image src={"/logo.svg"} alt="Logo" width={28} height={28} />
+                  {isStreaming && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-zinc-100">
-                    Enhanced AI Assistant
+                  <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+                    Streaming AI Assistant
+                    {isStreaming && (
+                      <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/20">
+                        Live
+                      </Badge>
+                    )}
                   </h2>
                   <p className="text-sm text-zinc-400">
                     {activeFileName
                       ? `Working on ${activeFileName}`
                       : "No active file"}{" "}
                     • {messages.length} messages
+                    {isStreaming && " • Streaming response..."}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* Cancel streaming button */}
+                {isStreaming && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={cancelStream}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        <Square className="h-4 w-4 mr-1" />
+                        Stop
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Cancel streaming response</TooltipContent>
+                  </Tooltip>
+                )}
+
+                {/* Retry button */}
+                {error && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={retryLastMessage}
+                        className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Retry
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Retry last message</TooltipContent>
+                  </Tooltip>
+                )}
+
                 {activeFileName && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -980,24 +541,11 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuCheckboxItem
-                      checked={autoSave}
-                      onCheckedChange={setAutoSave}
-                    >
-                      Auto-save conversations
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={streamResponse}
-                      onCheckedChange={setStreamResponse}
-                    >
-                      Stream responses
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={exportChat}>
                       <Download className="h-4 w-4 mr-2" />
                       Export Chat
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setMessages([])}>
+                    <DropdownMenuItem onClick={clearMessages}>
                       Clear All Messages
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -1095,18 +643,17 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
           {/* Messages Container */}
           <div className="flex-1 overflow-y-auto bg-zinc-950">
             <div className="p-6 space-y-6">
-              {filteredMessages.length === 0 && !isLoading && (
+              {filteredMessages.length === 0 && !isLoading && !isStreaming && (
                 <div className="text-center text-zinc-500 py-16">
                   <div className="relative w-16 h-16 border rounded-full flex flex-col justify-center items-center mx-auto mb-4">
                     <Brain className="h-8 w-8 text-zinc-400" />
                   </div>
                   <h3 className="text-xl font-semibold mb-3 text-zinc-300">
-                    Enhanced AI Assistant
+                    Streaming AI Assistant
                   </h3>
                   <p className="text-zinc-400 max-w-md mx-auto leading-relaxed mb-6">
-                    Advanced AI coding assistant with file attachments, code
-                    execution, smart suggestions, and comprehensive analysis
-                    capabilities.
+                    Real-time AI coding assistant with streaming responses, file attachments, 
+                    and comprehensive analysis capabilities.
                   </p>
                   <div className="grid grid-cols-2 gap-2 max-w-lg mx-auto">
                     {[
@@ -1140,6 +687,9 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                     {msg.role === "assistant" && (
                       <div className="relative w-10 h-10 border rounded-full flex flex-col justify-center items-center">
                         <Brain className="h-5 w-5 text-zinc-400" />
+                        {msg.isStreaming && (
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
+                        )}
                       </div>
                     )}
 
@@ -1152,11 +702,24 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                       )}
                     >
                       {msg.role === "assistant" && (
-                        <MessageTypeIndicator
-                          type={msg.type}
-                          model={msg.model}
-                          tokens={msg.tokens}
-                        />
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3 text-zinc-400" />
+                            <span className="text-xs font-medium text-zinc-400">
+                              {msg.isStreaming ? "Streaming..." : "Response"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-zinc-500">
+                            {msg.model && <span>{msg.model}</span>}
+                            {msg.tokens && <span>{msg.tokens} tokens</span>}
+                            {msg.isStreaming && (
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                                <span>Live</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
 
                       <div className="prose prose-invert prose-sm max-w-none">
@@ -1217,6 +780,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                       <div className="flex items-center justify-between mt-3 pt-2 border-t border-zinc-700/30">
                         <div className="text-xs text-zinc-500">
                           {msg.timestamp.toLocaleTimeString()}
+                          {msg.isStreaming && " • Streaming..."}
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
@@ -1229,14 +793,16 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                           >
                             <Copy className="h-3 w-3" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setInput(msg.content)}
-                            className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-200"
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                          </Button>
+                          {!msg.isStreaming && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setInput(msg.content)}
+                              className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-200"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1249,53 +815,29 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                       </Avatar>
                     )}
                   </div>
-
-                  {/* Enhanced Code suggestions */}
-                  {msg.role === "assistant" &&
-                    msg.suggestions &&
-                    msg.suggestions.length > 0 && (
-                      <div className="ml-14 space-y-2">
-                        <div className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-purple-400" />
-                          Smart Code Suggestions ({msg.suggestions.length}):
-                        </div>
-                        {msg.suggestions.map((suggestion) => (
-                          <CodeSuggestionCard
-                            key={suggestion.id}
-                            suggestion={suggestion}
-                            onInsert={() =>
-                              handleInsertCode(
-                                suggestion.code,
-                                suggestion.fileName,
-                                suggestion.insertPosition
-                              )
-                            }
-                            onCopy={() => handleCopySuggestion(suggestion.code)}
-                            onRun={onRunCode}
-                            activeFileName={activeFileName}
-                          />
-                        ))}
-                      </div>
-                    )}
                 </div>
               ))}
 
-              {isLoading && (
+              {/* Error display */}
+              {error && (
                 <div className="flex items-start gap-4 justify-start">
                   <div className="relative w-10 h-10 border rounded-full flex flex-col justify-center items-center">
-                    <Brain className="h-5 w-5 text-zinc-400" />
+                    <Brain className="h-5 w-5 text-red-400" />
                   </div>
-                  <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 p-5 rounded-xl rounded-bl-md flex items-center gap-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-                    <span className="text-sm text-zinc-300">
-                      {chatMode === "review"
-                        ? "Analyzing code structure and patterns..."
-                        : chatMode === "fix"
-                        ? "Identifying issues and solutions..."
-                        : chatMode === "optimize"
-                        ? "Analyzing performance bottlenecks..."
-                        : "Processing your request..."}
-                    </span>
+                  <div className="bg-red-900/20 border border-red-800/50 p-4 rounded-xl rounded-bl-md flex items-center gap-3">
+                    <X className="h-4 w-4 text-red-400" />
+                    <div>
+                      <span className="text-sm text-red-300">Error: {error}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={retryLastMessage}
+                        className="ml-2 text-red-400 hover:text-red-300"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Retry
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1303,6 +845,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
               <div ref={messagesEndRef} className="h-1" />
             </div>
           </div>
+
           {/* Enhanced File Attachments Preview */}
           {attachments.length > 0 && (
             <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/50 p-4">
@@ -1367,7 +910,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                       handleSendMessage(e as any);
                     }
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || isStreaming}
                   className="min-h-[44px] max-h-32 bg-zinc-800/50 border-zinc-700/50 text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:ring-blue-500/20 resize-none pr-20"
                   rows={1}
                 />
@@ -1388,10 +931,10 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
               </div>
               <Button
                 type="submit"
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || isStreaming || !input.trim()}
                 className="h-11 px-4 bg-blue-600 hover:bg-blue-700 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isLoading ? (
+                {isLoading || isStreaming ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Send className="h-4 w-4" />
