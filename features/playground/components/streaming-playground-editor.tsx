@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react"
 import Editor, { type Monaco } from "@monaco-editor/react"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "@/features/playground/libs/editor-config"
 import { useStreamingAISuggestions } from "@/features/playground/hooks/useStreamingAISuggestion"
@@ -13,11 +13,20 @@ interface StreamingPlaygroundEditorProps {
   onContentChange: (value: string) => void
 }
 
-export const StreamingPlaygroundEditor = ({
+// Editor methods that can be called from parent components
+export interface StreamingPlaygroundEditorRef {
+  insertCode: (code: string, position?: { line: number; column: number }) => void
+  replaceSelection: (code: string) => void
+  replaceAll: (code: string) => void
+  getCursorPosition: () => { line: number; column: number } | null
+  focus: () => void
+}
+
+export const StreamingPlaygroundEditor = forwardRef<StreamingPlaygroundEditorRef, StreamingPlaygroundEditorProps>(({
   activeFile,
   content,
   onContentChange,
-}: StreamingPlaygroundEditorProps) => {
+}, ref) => {
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const suggestionManagerRef = useRef<StreamingSuggestionManager | null>(null)
@@ -36,6 +45,83 @@ export const StreamingPlaygroundEditor = ({
     clearSuggestion,
     cancelStream,
   } = useStreamingAISuggestions()
+
+  // Expose editor methods to parent components
+  useImperativeHandle(ref, () => ({
+    insertCode: (code: string, position?: { line: number; column: number }) => {
+      if (!editorRef.current) return;
+      
+      const editor = editorRef.current;
+      const targetPosition = position || editor.getPosition();
+      
+      if (targetPosition) {
+        editor.executeEdits('ai-insert', [{
+          range: {
+            startLineNumber: targetPosition.line,
+            startColumn: targetPosition.column,
+            endLineNumber: targetPosition.line,
+            endColumn: targetPosition.column
+          },
+          text: code
+        }]);
+        
+        // Update cursor position after insert
+        const lines = code.split('\n');
+        const newLine = targetPosition.line + lines.length - 1;
+        const newColumn = lines.length === 1 
+          ? targetPosition.column + code.length 
+          : lines[lines.length - 1].length + 1;
+          
+        editor.setPosition({ lineNumber: newLine, column: newColumn });
+        editor.focus();
+      }
+    },
+    
+    replaceSelection: (code: string) => {
+      if (!editorRef.current) return;
+      
+      const editor = editorRef.current;
+      const selection = editor.getSelection();
+      
+      if (selection) {
+        editor.executeEdits('ai-replace-selection', [{
+          range: selection,
+          text: code
+        }]);
+        editor.focus();
+      }
+    },
+    
+    replaceAll: (code: string) => {
+      if (!editorRef.current) return;
+      
+      const editor = editorRef.current;
+      const model = editor.getModel();
+      
+      if (model) {
+        const fullRange = model.getFullModelRange();
+        editor.executeEdits('ai-replace-all', [{
+          range: fullRange,
+          text: code
+        }]);
+        editor.setPosition({ lineNumber: 1, column: 1 });
+        editor.focus();
+      }
+    },
+    
+    getCursorPosition: () => {
+      if (!editorRef.current) return null;
+      
+      const position = editorRef.current.getPosition();
+      return position ? { line: position.lineNumber, column: position.column } : null;
+    },
+    
+    focus: () => {
+      if (editorRef.current) {
+        editorRef.current.focus();
+      }
+    }
+  }), []);
 
   // Initialize suggestion manager
   const initializeSuggestionManager = useCallback(() => {
@@ -309,4 +395,6 @@ export const StreamingPlaygroundEditor = ({
       `}</style>
     </div>
   )
-}
+})
+
+StreamingPlaygroundEditor.displayName = "StreamingPlaygroundEditor"

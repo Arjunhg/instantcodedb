@@ -1,11 +1,12 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect, useRef } from "react";
+import React from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { StreamingAIChatInput } from "./StreamingChatInput";
 import {
   Loader2,
   Send,
@@ -84,7 +85,7 @@ interface StreamingAIChatSidePanelProps {
   theme?: "dark" | "light";
 }
 
-export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> = ({
+export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> = React.memo(({
   isOpen,
   onClose,
   onInsertCode,
@@ -96,6 +97,7 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
   theme = "dark",
 }) => {
   const [input, setInput] = useState("");
+  // const [debouncedInput, setDebouncedInput] = useState("");
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [chatMode, setChatMode] = useState<
@@ -106,6 +108,16 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Debounce input for better performance
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setDebouncedInput(input);
+  //   }, 100); // 100ms debounce
+
+  //   return () => clearTimeout(timer);
+  // }, [input]);
 
   const {
     messages,
@@ -119,18 +131,41 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
     retryLastMessage,
   } = useStreamingChat();
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
+  // Debug effect to track activeFile changes - only when panel is open and meaningful changes occur
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      scrollToBottom();
-    }, 100);
+    // Only log when panel is open to avoid unnecessary logging
+    if (isOpen) {
+      console.log('StreamingAIChatSidePanel props updated:', {
+        activeFileName,
+        activeFileContent: activeFileContent?.substring(0, 50) + '...',
+        activeFileLanguage,
+        cursorPosition,
+        contentLength: activeFileContent?.length
+      });
+    }
+  }, [
+    isOpen,
+    activeFileName, 
+    activeFileLanguage, 
+    activeFileContent?.length, 
+    cursorPosition?.line
+  ]);
+
+  // Optimized scroll function with debouncing
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: "smooth",
+        block: "end"
+      });
+    }
+  }, []);
+
+  // Debounced scroll effect
+  useEffect(() => {
+    const timeoutId = setTimeout(scrollToBottom, 50);
     return () => clearTimeout(timeoutId);
-  }, [messages, isLoading, isStreaming]);
+  }, [messages.length, isLoading, isStreaming, scrollToBottom]);
 
   // Enhanced language detection
   const detectLanguage = (fileName: string, content: string): string => {
@@ -194,7 +229,8 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
     return "text";
   };
 
-  const addFileAttachment = (
+  // Memoized file attachment handlers
+  const addFileAttachment = useCallback((
     fileName: string,
     content: string,
     mimeType?: string
@@ -211,11 +247,11 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
       mimeType,
     };
     setAttachments((prev) => [...prev, newFile]);
-  };
+  }, []);
 
-  const removeAttachment = (id: string) => {
+  const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((file) => file.id !== id));
-  };
+  }, []);
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const pastedText = e.clipboardData.getData("text");
@@ -324,21 +360,39 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  // Optimized message sending with better error handling
+  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || isStreaming) return;
+    
+    const trimmedInput = input.trim();
+    if (!trimmedInput || isLoading || isStreaming) return;
 
-    const contextualMessage = getChatModePrompt(chatMode, input.trim());
-
-    await sendMessage(contextualMessage, {
-      attachments: [...attachments],
-      mode: chatMode,
-      history: messages.slice(-10),
-    });
-
+    // Clear input immediately for better UX
     setInput("");
-    setAttachments([]);
-  };
+    
+    try {
+      const contextualMessage = getChatModePrompt(chatMode, trimmedInput);
+
+      await sendMessage(contextualMessage, {
+        attachments: [...attachments],
+        mode: chatMode,
+        history: messages.slice(-10),
+      });
+
+      // Clear attachments after successful send
+      setAttachments([]);
+      
+      // Focus back to input for continuous typing
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      
+    } catch (error) {
+      // Restore input on error
+      setInput(trimmedInput);
+      console.error('Failed to send message:', error);
+    }
+  }, [input, isLoading, isStreaming, chatMode, attachments, messages, sendMessage]);
 
   const handleInsertCode = (
     code: string,
@@ -354,11 +408,31 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
     }
   };
 
-  const addCurrentFileAsContext = () => {
+  // Fixed addCurrentFileAsContext function with proper debugging
+  const addCurrentFileAsContext = useCallback(() => {
+    console.log('addCurrentFileAsContext called with:', {
+      activeFileName,
+      activeFileContent: activeFileContent?.substring(0, 100) + '...',
+      hasContent: !!activeFileContent
+    });
+    
     if (activeFileName && activeFileContent) {
-      addFileAttachment(activeFileName, activeFileContent);
+      // Ensure we're using the actual current file data
+      const currentFileData = {
+        fileName: activeFileName,
+        content: activeFileContent,
+        language: activeFileLanguage || detectLanguage(activeFileName, activeFileContent)
+      };
+      
+      console.log('Adding file to context:', currentFileData.fileName);
+      addFileAttachment(currentFileData.fileName, currentFileData.content);
+    } else {
+      console.warn('Cannot add current file - missing fileName or content:', {
+        hasFileName: !!activeFileName,
+        hasContent: !!activeFileContent
+      });
     }
-  };
+  }, [activeFileName, activeFileContent, activeFileLanguage]);
 
   const exportChat = () => {
     const chatData = {
@@ -384,15 +458,18 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
     URL.revokeObjectURL(url);
   };
 
-  const filteredMessages = messages
-    .filter((msg) => {
-      if (filterType === "all") return true;
-      return msg.type === filterType;
-    })
-    .filter((msg) => {
-      if (!searchTerm) return true;
-      return msg.content.toLowerCase().includes(searchTerm.toLowerCase());
-    });
+  // Memoized filtered messages for better performance
+  const filteredMessages = useMemo(() => {
+    return messages
+      .filter((msg) => {
+        if (filterType === "all") return true;
+        return msg.type === filterType;
+      })
+      .filter((msg) => {
+        if (!searchTerm) return true;
+        return msg.content.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+  }, [messages, filterType, searchTerm]);
 
   return (
     <TooltipProvider>
@@ -730,11 +807,11 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
                             code: ({
                               children,
                               className,
-                              inline: _inline,
+                              ...props
                             }) => (
                               <EnhancedCodeBlock
                                 className={className}
-                                inline={_inline as boolean}
+                                inline={(props as any).inline as boolean}
                                 onInsert={
                                   onInsertCode
                                     ? (code) => handleInsertCode(code)
@@ -886,62 +963,18 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
           )}
 
           {/* Enhanced Input Form */}
-          <form
-            onSubmit={handleSendMessage}
-            className="shrink-0 p-4 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-sm"
-          >
-            <div className="flex items-end gap-3">
-              <div className="flex-1 relative">
-                <Textarea
-                  placeholder={
-                    chatMode === "chat"
-                      ? "Ask about your code, request improvements, or paste code to analyze..."
-                      : chatMode === "review"
-                      ? "Describe what you'd like me to review in your code..."
-                      : chatMode === "fix"
-                      ? "Describe the issue you're experiencing..."
-                      : "Describe what you'd like me to optimize..."
-                  }
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onPaste={handlePaste}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      handleSendMessage(e as any);
-                    }
-                  }}
-                  disabled={isLoading || isStreaming}
-                  className="min-h-[44px] max-h-32 bg-zinc-800/50 border-zinc-700/50 text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:ring-blue-500/20 resize-none pr-20"
-                  rows={1}
-                />
-                <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-300"
-                  >
-                    <Paperclip className="h-3 w-3" />
-                  </Button>
-                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded">
-                    ⌘↵
-                  </kbd>
-                </div>
-              </div>
-              <Button
-                type="submit"
-                disabled={isLoading || isStreaming || !input.trim()}
-                className="h-11 px-4 bg-blue-600 hover:bg-blue-700 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isLoading || isStreaming ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </form>
+          <StreamingAIChatInput
+            value={input}
+            onChange={(value) => setInput(value)}
+            onSend={handleSendMessage}
+            onPaste={handlePaste}
+            disabled={isLoading || isStreaming}
+            inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+            onAttachClick={() => fileInputRef.current?.click()}
+            chatMode={chatMode}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+          />
 
           {/* Hidden file input */}
           <input
@@ -967,4 +1000,20 @@ export const StreamingAIChatSidePanel: React.FC<StreamingAIChatSidePanelProps> =
       </>
     </TooltipProvider>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  // Only re-render if meaningful props change
+  return (
+    prevProps.isOpen === nextProps.isOpen &&
+    prevProps.activeFileName === nextProps.activeFileName &&
+    prevProps.activeFileLanguage === nextProps.activeFileLanguage &&
+    prevProps.theme === nextProps.theme &&
+    // Only compare content length and line number to avoid constant re-renders
+    prevProps.activeFileContent?.length === nextProps.activeFileContent?.length &&
+    prevProps.cursorPosition?.line === nextProps.cursorPosition?.line &&
+    // Compare function references (they should be stable with useCallback)
+    prevProps.onClose === nextProps.onClose &&
+    prevProps.onInsertCode === nextProps.onInsertCode &&
+    prevProps.onRunCode === nextProps.onRunCode
+  );
+});

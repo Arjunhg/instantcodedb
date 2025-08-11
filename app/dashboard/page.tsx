@@ -1,8 +1,7 @@
 import AddNewButton from "@/features/dashboard/components/add-new-btn";
-import AddRepo from "@/features/dashboard/components/add-repo";
-
-import ProjectTable from "@/features/dashboard/components/project-table";
-import { getAllPlaygroundForUser , deleteProjectById ,editProjectById , duplicateProjectById} from "@/features/playground/actions";
+// import AddRepo from "@/features/dashboard/components/add-repo";
+import ProjectTableWrapper from "@/features/dashboard/components/project-table-wrapper";
+import { getAllPlaygroundForUser } from "@/features/playground/actions";
 
 const EmptyState = () => (
   <div className="flex flex-col items-center justify-center py-16">
@@ -17,21 +16,15 @@ const DashboardMainPage = async () => {
   console.log(playgrounds);
   return (
     <div className="flex flex-col justify-start items-center min-h-screen mx-auto max-w-7xl px-4 py-10">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+      <div className="flex flex-row md:justify-center justify-between items-center w-full">
         <AddNewButton />
-        <AddRepo />
+        {/* <AddRepo /> */}
       </div>
       <div className="mt-10 flex flex-col justify-center items-center w-full">
         {playgrounds && playgrounds.length === 0 ? (
           <EmptyState />
         ) : (
-          // @ts-ignore
-          <ProjectTable
-            projects={playgrounds || []}
-            onDeleteProject={deleteProjectById}
-            onUpdateProject={editProjectById}
-            onDuplicateProject={duplicateProjectById}
-          />
+          <ProjectTableWrapper projects={playgrounds || []} />
         )}
       </div>
     </div>

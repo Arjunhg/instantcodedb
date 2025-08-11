@@ -1,5 +1,4 @@
-"use client";
-
+'use client'
 import React, { useRef } from "react";
 import { useState, useCallback } from "react";
 import { Separator } from "@/components/ui/separator";
@@ -40,7 +39,7 @@ import {
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
 import LoadingStep from "@/components/ui/loader";
 // import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
-import { StreamingPlaygroundEditor } from "@/features/playground/components/streaming-playground-editor";
+import { StreamingPlaygroundEditor, type StreamingPlaygroundEditorRef } from "@/features/playground/components/streaming-playground-editor";
 import ToggleAI from "@/features/playground/components/toggle-ai";
 import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer";
 import { usePlayground } from "@/features/playground/hooks/usePlayground";
@@ -69,6 +68,10 @@ const MainPlaygroundPage: React.FC = () => {
   const { playgroundData, templateData, isLoading, error, saveTemplateData } =
     usePlayground(id);
   const aiSuggestions = useAISuggestions();
+  
+  // Editor ref for code insertion
+  const editorRef = useRef<StreamingPlaygroundEditorRef>(null);
+  
   const {
     activeFileId,
     closeAllFiles,
@@ -180,6 +183,51 @@ const MainPlaygroundPage: React.FC = () => {
 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
+
+  // Helper to get proper language name from file extension
+  const getLanguageFromExtension = (extension: string): string => {
+    const langMap: { [key: string]: string } = {
+      'js': 'JavaScript',
+      'jsx': 'JavaScript (React)',
+      'ts': 'TypeScript',
+      'tsx': 'TypeScript (React)',
+      'py': 'Python',
+      'java': 'Java',
+      'cpp': 'C++',
+      'c': 'C',
+      'html': 'HTML',
+      'css': 'CSS',
+      'scss': 'SCSS',
+      'json': 'JSON',
+      'md': 'Markdown',
+      'sql': 'SQL',
+      'sh': 'Shell',
+      'php': 'PHP',
+      'rb': 'Ruby',
+      'go': 'Go',
+      'rs': 'Rust',
+      'vue': 'Vue',
+      'svelte': 'Svelte'
+    };
+    return langMap[extension.toLowerCase()] || extension.toUpperCase();
+  };
+
+  // Handler for AI code insertion
+  const handleInsertCode = useCallback((code: string, position?: { line: number; column: number }) => {
+    if (!editorRef.current) {
+      console.warn('Editor ref not available for code insertion');
+      return;
+    }
+    
+    console.log('Inserting code at position:', position, '\nCode:', code);
+    
+    if (position) {
+      editorRef.current.insertCode(code, position);
+    } else {
+      // Insert at current cursor position
+      editorRef.current.insertCode(code);
+    }
+  }, []);
 
   const handleFileSelect = (file: TemplateFile) => {
     openFile(file);
@@ -423,6 +471,11 @@ const MainPlaygroundPage: React.FC = () => {
                   isEnabled={aiSuggestions.isEnabled}
                   onToggle={aiSuggestions.toggleEnabled}
                   suggestionLoading={aiSuggestions.isLoading}
+                  activeFileName={activeFile ? `${activeFile.filename}.${activeFile.fileExtension}` : undefined}
+                  activeFileContent={activeFile?.content}
+                  activeFileLanguage={activeFile ? getLanguageFromExtension(activeFile.fileExtension) : undefined}
+                  cursorPosition={{ line: 1, column: 1 }} // TODO: Get actual cursor position from editor
+                  onInsertCode={handleInsertCode}
                 />
 
                 <DropdownMenu>
@@ -508,6 +561,7 @@ const MainPlaygroundPage: React.FC = () => {
                   >
                     <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
                       <StreamingPlaygroundEditor
+                        ref={editorRef}
                         activeFile={activeFile}
                         content={activeFile?.content || ""}
                         onContentChange={(value) =>

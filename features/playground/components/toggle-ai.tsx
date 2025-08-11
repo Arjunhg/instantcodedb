@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,6 +45,13 @@ interface ToggleAIProps {
   suggestionLoading: boolean;
   loadingProgress?: number;
   activeFeature?: string;
+  
+  // Add proper file context props
+  activeFileName?: string;
+  activeFileContent?: string;
+  activeFileLanguage?: string;
+  cursorPosition?: { line: number; column: number };
+  onInsertCode?: (code: string, position?: { line: number; column: number }) => void;
 }
 
 const ToggleAI: React.FC<ToggleAIProps> = ({
@@ -54,25 +61,64 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
   suggestionLoading,
   loadingProgress = 0,
   activeFeature,
+  
+  // Proper file context props
+  activeFileName,
+  activeFileContent,
+  activeFileLanguage,
+  cursorPosition,
+  onInsertCode,
 }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Dummy handler for code insertion from AI chat panel
-  const handleInsertCode = (code: string, fileName?: string, position?: { line: number; column: number }) => {
-    // TODO: Implement actual code insertion logic
-    // For now, just log the code and info
-    console.log("Insert code:", { code, fileName, position });
-    // You can add your integration with the editor here
-  };
+  // Debug logging to track file context
+  useEffect(() => {
+    console.log('ToggleAI received props:', {
+      activeFileName,
+      activeFileContent: activeFileContent?.substring(0, 50) + '...',
+      activeFileLanguage,
+      cursorPosition,
+      contentLength: activeFileContent?.length
+    });
+  }, [activeFileName, activeFileContent, activeFileLanguage, cursorPosition]);
 
-  // Dummy handler for running code from AI chat panel
-  const handleRunCode = (code: string, language: string) => {
+  // Memoized handlers to prevent unnecessary re-renders
+  const handleInsertCode = useCallback((code: string, fileName?: string, position?: { line: number; column: number }) => {
+    console.log("ToggleAI handleInsertCode called:", { code, fileName, position });
+    
+    if (onInsertCode) {
+      // Call the parent's insertCode handler
+      onInsertCode(code, position);
+    } else {
+      console.warn("No onInsertCode handler provided to ToggleAI");
+    }
+  }, [onInsertCode]);
+
+  // Memoized handler for running code from AI chat panel
+  const handleRunCode = useCallback((code: string, language: string) => {
     console.log("Run code:", { code, language });
-  };
+  }, []);
 
-  // Dummy activeFile and cursorPosition for demonstration
-  const activeFile = { name: "example.ts", content: "// file content" };
-  const cursorPosition = { line: 1, column: 1 };
+  // Memoize file context to prevent unnecessary re-renders on content changes
+  const memoizedFileContext = useMemo(() => ({
+    name: activeFileName || "untitled.txt",
+    content: activeFileContent || "// No content available",
+    language: activeFileLanguage || "typescript",
+    // Only update cursor position when chat is open to avoid constant updates
+    cursorPosition: isChatOpen ? (cursorPosition || { line: 1, column: 1 }) : { line: 1, column: 1 }
+  }), [
+    activeFileName, 
+    // Only include activeFileContent when chat is open to prevent constant updates
+    isChatOpen ? activeFileContent : "static", 
+    activeFileLanguage,
+    // Only track cursor when chat is open
+    isChatOpen ? JSON.stringify(cursorPosition) : "static"
+  ]);
+
+  // Memoized close handler
+  const handleCloseChat = useCallback(() => {
+    setIsChatOpen(false);
+  }, []);
 
   return (
     <>
@@ -194,13 +240,13 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
 
       <StreamingAIChatSidePanel
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={handleCloseChat}
         onInsertCode={handleInsertCode}
         onRunCode={handleRunCode}
-        activeFileName={activeFile?.name}
-        activeFileContent={activeFile?.content}
-        activeFileLanguage="TypeScript" // Assuming TypeScript as the language
-        cursorPosition={cursorPosition}
+        activeFileName={memoizedFileContext.name}
+        activeFileContent={memoizedFileContext.content}
+        activeFileLanguage={memoizedFileContext.language}
+        cursorPosition={memoizedFileContext.cursorPosition}
         theme="dark"
       />
     </>

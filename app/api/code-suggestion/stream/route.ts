@@ -153,7 +153,7 @@ function detectReactPatterns(beforeContext: string): boolean {
 
 // Helper function to create completion-focused prompt
 function buildPrompt(context: any, suggestionType: string): string {
-  const { beforeContext, currentLine, afterContext, cursorPosition, language, framework } = context;
+  const { beforeContext, currentLine, afterContext, cursorPosition, language, framework, isAfterComment } = context;
   
   // Extract relevant context
   const imports = extractImports(beforeContext);
@@ -163,24 +163,58 @@ function buildPrompt(context: any, suggestionType: string): string {
   const lineBeforeCursor = currentLine.substring(0, cursorPosition.column);
   const lineAfterCursor = currentLine.substring(cursorPosition.column);
   
+  // Special handling for comments that indicate code requests
+  if (isAfterComment) {
+    const commentText = lineBeforeCursor.toLowerCase();
+    
+    // Check if comment is requesting code
+    const codeRequestPatterns = [
+      'add', 'create', 'build', 'make', 'implement',
+      'component', 'function', 'class', 'method',
+      'navbar', 'button', 'form', 'modal', 'card',
+      'tailwind', 'css', 'style', 'react', 'jsx'
+    ];
+    
+    const isCodeRequest = codeRequestPatterns.some(pattern => 
+      commentText.includes(pattern)
+    );
+    
+    if (isCodeRequest && (language === 'JavaScript' || language === 'TypeScript')) {
+      // Generate appropriate code based on context and comment
+      return `You are a code completion AI. The user has written a comment requesting code implementation.
+
+Context:
+- Language: ${language}
+- Framework: ${framework}
+- Comment: "${lineBeforeCursor.trim()}"
+
+${imports ? `Imports:\n${imports}\n` : ''}
+
+Current function context:
+${functionContext}
+
+IMPORTANT: Generate ONLY the actual code that should come after the comment, not explanations. 
+Start writing code immediately. If it's a React component request, write JSX. 
+If it's a function request, write the function. Be concise and practical.
+
+Complete this code:
+${lineBeforeCursor}`;
+    }
+  }
+  
   // For React/JavaScript useState patterns
   if (language === 'TypeScript' || language === 'JavaScript') {
     if (detectReactPatterns(beforeContext) && lineBeforeCursor.includes('useState')) {
-      // Provide React useState examples for pattern recognition
-      return `import React, { useState } from 'react';
+      return `${imports}
 
-function Component() {
-  const [count, setCount] = useState(0);
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
-  
-  ${lineBeforeCursor}`;
+${functionContext}
+${lineBeforeCursor}`;
     }
     
-    // For JSX/component creation
-    if (lineBeforeCursor.includes('return (') || lineBeforeCursor.includes('<')) {
-      // Provide clean JSX context
+    // For JSX/component creation - detect JSX context
+    if (lineBeforeCursor.includes('return (') || 
+        lineBeforeCursor.includes('<') ||
+        beforeContext.includes('return (')) {
       return `${imports}
 
 ${functionContext}
@@ -198,12 +232,10 @@ ${lineBeforeCursor}`;
   
   // For general code completion - use Fill-in-the-Middle approach
   if (afterContext.trim()) {
-    // FIM: prefix <fim_middle> suffix
     return `${imports}
 
 ${functionContext}
-${lineBeforeCursor}<fim_middle>${lineAfterCursor}
-${afterContext.split('\n').slice(0, 3).join('\n')}`;
+${lineBeforeCursor}`;
   }
   
   // Simple completion without suffix
@@ -303,25 +335,32 @@ export async function POST(request: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "codellama:latest", // Better model for code completion
+              model: "codellama:latest", // Better for code completion
               prompt,
               stream: true,
               options: {
-                temperature: 0.1,        // Low temperature for consistent completions
-                top_p: 0.9,             // Focus on most likely tokens
-                num_predict: 50,        // Shorter, focused completions
-                num_ctx: 4096,          // Larger context window
-                repeat_penalty: 1.0,    // Don't penalize code repetition
+                temperature: 0.05,      // Very low temperature for precise completions
+                top_p: 0.85,           // Focus on most likely tokens
+                num_predict: 200,      // Allow longer completions for JSX
+                num_ctx: 4096,         // Larger context window
+                repeat_penalty: 1.05,  // Slight penalty for repetition
                 stop: [
-                  "\n\n",              // Stop at double newlines
+                  "\n\nexport",        // Stop at next export
+                  "\n\nfunction",      // Stop at next function
+                  "\n\nconst",         // Stop at next const declaration
+                  "\n\nimport",        // Stop at next import
                   "```",               // Stop at code blocks
-                  "<fim_middle>",      // Stop at FIM markers
-                  "//",                // Stop at comments
-                  "/*",                // Stop at block comments
-                  "import React",      // Stop at duplicate imports
-                  "import {",          // Stop at duplicate imports
-                  "function ",         // Stop at new functions
-                  "export ",           // Stop at exports
+                  "//",
+                  "/*",
+                  "import React",
+                  "import {",
+                  "function ",
+                  "export ",
+                  "</html>",           // Stop at HTML closing
+                  "Here's",            // Stop at explanations
+                  "This is",           // Stop at explanations
+                  "The above",         // Stop at explanations
+                  "Example:",          // Stop at examples
                 ],
               },
             }),
@@ -360,33 +399,37 @@ export async function POST(request: NextRequest) {
                     cleanChunk = cleanChunk.replace(/<fim_prefix>/g, '');
                     cleanChunk = cleanChunk.replace(/<fim_suffix>/g, '');
                     
-                    // For the first chunk, remove common AI explanations
+                    // For the first chunk, aggressively filter explanatory content
                     if (isFirstChunk) {
-                      cleanChunk = cleanChunk.replace(/^(Sure!?|Here'?s?|Here is|Let me|I'll|I can|This is|The completion)/i, '');
+                      // Remove common AI explanation starters
+                      cleanChunk = cleanChunk.replace(/^(Sure!?|Here'?s?|Here is|Let me|I'll|I can|This is|The completion|You can|To create|To add)/i, '');
+                      
+                      // If the entire first chunk is explanatory, skip it
+                      const explanatoryFirstChunk = /^(an example of|how you can|a simple|the way to)/i;
+                      if (explanatoryFirstChunk.test(cleanChunk.trim())) {
+                        continue;
+                      }
+                      
                       isFirstChunk = false;
                     }
                     
-                    // Skip chunks that are clearly explanatory (but only if they're long)
+                    // Skip chunks that are clearly explanatory text
                     const explanatoryPatterns = [
-                      /completion for/i,
-                      /example of/i,
-                      /this code/i,
-                      /function.*react/i,
-                      /typescript.*component/i,
-                      /here.*how/i
+                      /^(an? example of|how you can|this (?:is|will)|using tailwind)/i,
+                      /^(to (?:create|add|make|build)|the (?:above|following))/i,
+                      /^(in this|for this|with this)/i
                     ];
                     
                     const isExplanatory = explanatoryPatterns.some(pattern => 
-                      pattern.test(cleanChunk)
+                      pattern.test(cleanChunk.trim())
                     );
                     
-                    if (isExplanatory && cleanChunk.length > 30) {
-                      // Skip long explanatory chunks
+                    // Skip explanatory chunks entirely
+                    if (isExplanatory) {
                       continue;
                     }
                     
-                    // Send all chunks (including spaces and single characters)
-                    // This preserves proper formatting
+                    // Send valid code chunks
                     if (cleanChunk !== '') {
                       fullSuggestion += cleanChunk;
                       
