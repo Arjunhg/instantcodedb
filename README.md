@@ -167,7 +167,7 @@ Create `.env.local`:
 # Redis (Required for semantic caching)
 REDIS_URL=redis://localhost:6379
 
-# Database
+# Database(Optional)
 DATABASE_URL=your_mongodb_connection_string
 
 # Authentication (Optional)
@@ -203,7 +203,7 @@ Configure your environment variables:
 # Redis (Essential for semantic caching)
 REDIS_URL="redis://localhost:6379"
 
-# Database
+# Database(Optional)
 DATABASE_URL="your_mongodb_connection_string"
 
 # Authentication(Optional)
