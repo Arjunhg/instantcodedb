@@ -56,31 +56,43 @@ export const createPlayground = async (data:{
                 title:title,
                 description:description,
                 template:template,
-                userId:user?.id!
+                userId:user?.id! // Uses demo user ID
             }
         })
 
         return playground;
     } catch (error) {
         console.log(error)
+        // HACKATHON: Return mock playground if DB fails
+        return {
+            id: `demo-${Date.now()}`,
+            title,
+            description,
+            template,
+            userId: user?.id!,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
     }
 }
 
 
 export const getAllPlaygroundForUser = async ()=>{
-    const user = await currentUser();
+    // HACKATHON: Temporarily bypass user-specific data
+    // Return all playgrounds for demo purposes
     try {
-        const user  = await currentUser();
         const playground = await db.playground.findMany({
-            where:{
-                userId:user?.id!
-            },
+            // HACKATHON: Remove user filter for demo
+            // where:{
+            //     userId:user?.id!
+            // },
             include:{
                 user:true,
                 Starmark:{
-                    where:{
-                        userId:user?.id!
-                    },
+                    // HACKATHON: Get all starmarks for demo
+                    // where:{
+                    //     userId:user?.id!
+                    // },
                     select:{
                         isMarked:true
                     }
@@ -91,6 +103,8 @@ export const getAllPlaygroundForUser = async ()=>{
         return playground;
     } catch (error) {
         console.log(error)
+        // HACKATHON: Return empty array if DB fails (for demo without DB)
+        return [];
     }
 }
 

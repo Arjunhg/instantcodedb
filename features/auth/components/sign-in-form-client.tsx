@@ -9,16 +9,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Chrome, Github } from "lucide-react";
-import { signIn } from "@/auth";
+// HACKATHON: Temporarily disabled auth
+// import { signIn } from "@/auth";
 
 async function handleGoogleSignIn(){
 "use server"
-await signIn("google")
+// HACKATHON: Mock sign in - redirect to dashboard
+// await signIn("google")
 }
 
 async function handleGithubSignIn(){
 "use server"
-await signIn("github")
+// HACKATHON: Mock sign in - redirect to dashboard  
+// await signIn("github")
 }
 
 const SignInFormClient = () => {

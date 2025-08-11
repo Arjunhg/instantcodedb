@@ -5,7 +5,15 @@
  */
 
 export const publicRoutes: string[] = [
-   
+   // HACKATHON: All routes are public for demo
+   "/",
+   "/dashboard",
+   "/playground",
+   "/cache-demo",
+   "/api/code-suggestion",
+   "/api/chat",
+   "/api/cache-stats",
+   "/api/test-cache"
 ]
 
 /**

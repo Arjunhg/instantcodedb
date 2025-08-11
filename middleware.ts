@@ -1,3 +1,6 @@
+// HACKATHON: Temporarily disabled auth middleware for demo
+// All routes are now public for hackathon submission
+
 import NextAuth from "next-auth";
 
 import {
@@ -8,18 +11,20 @@ import {
 } from "@/routes";
 import authConfig from "./auth.config";
 
-
 const { auth } = NextAuth(authConfig);
 
 // @ts-ignore
 export default auth((req) => {
+  // HACKATHON: Allow all routes without authentication
+  return null;
+  
+  // Original auth logic (commented for hackathon)
+  /*
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
   const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
-
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
-
   const isAuthRoute = authRoutes.includes(nextUrl.pathname);
 
   if (isApiAuthRoute) {
@@ -38,6 +43,7 @@ export default auth((req) => {
   }
 
   return null
+  */
 });
 
 export const config = {

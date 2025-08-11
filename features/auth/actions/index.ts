@@ -1,6 +1,7 @@
 "use server";
 
-import { auth } from "@/auth";
+// HACKATHON: Temporarily disabled auth
+// import { auth } from "@/auth";
 import { db } from "@/lib/db";
 
 
@@ -32,6 +33,17 @@ export const getAccountByUserId = async (userId:string)=>{
 }
 
 export const currentUser = async()=>{
-    const user = await auth()
-    return user?.user;
+    // HACKATHON: Temporarily bypass auth for demo
+    // Return a mock user for all operations
+    return {
+        id: "demo-user-id",
+        name: "Demo User",
+        email: "demo@instantcodedb.com",
+        image: null,
+        role: "USER"
+    };
+    
+    // Original auth code (commented for hackathon)
+    // const user = await auth()
+    // return user?.user;
 }

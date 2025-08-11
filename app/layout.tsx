@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-providers";
-import { SessionProvider } from "next-auth/react";
-import { auth } from "@/auth";
+// HACKATHON: Temporarily disabled auth
+// import { SessionProvider } from "next-auth/react";
+// import { auth } from "@/auth";
 import { Toaster } from "@/components/ui/sonner";
 
 const poppins = Poppins({
@@ -24,9 +25,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
 
-  const session = await auth()
+  // HACKATHON: Temporarily disabled auth
+  // const session = await auth()
   return (
-    <SessionProvider session={session}>
+    // HACKATHON: Temporarily disabled SessionProvider
+    // <SessionProvider session={session}>
     <html lang="en" suppressHydrationWarning>
       <body
         className={` ${poppins.className} antialiased`}
@@ -44,6 +47,6 @@ export default async function RootLayout({
         </ThemeProvider>
       </body>
     </html>
-    </SessionProvider>
+    // </SessionProvider>
   );
 }

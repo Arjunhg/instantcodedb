@@ -9,7 +9,9 @@
     "lint": "next lint",
     "setup-redis": "node scripts/setup-redis.js",
     "test-prompting": "node test-prompting.js",
-    "clear-cache": "node clear-cache.js"
+    "clear-cache": "node clear-cache.js",
+    "hackathon-setup": "node scripts/hackathon-setup.js",
+    "test-hackathon": "node test-hackathon-setup.js --run"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
