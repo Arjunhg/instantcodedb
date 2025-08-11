@@ -1,6 +1,6 @@
 # 🧠 InstantCodeDB – AI-Powered Web IDE with Redis Semantic Caching
 
-![InstantCodeDB Editor Thumbnail](public/landing.png)
+![InstantCodeDB Editor Thumbnail](public/Landing.png)
 
 **InstantCodeDB** is a blazing-fast, AI-integrated web IDE built entirely in the browser using **Next.js App Router**, **WebContainers**, **Monaco Editor**, **Redis semantic caching**, and **local LLMs via Ollama**. It leverages Redis-powered semantic caching to reduce AI response times from 3000ms to 50ms (95% improvement), delivering real-time code execution and an intelligent chat assistant — all wrapped in a stunning developer-first UI.
 
